@@ -126,7 +126,7 @@
 
 &#x20;**Risks**
 
-| Risks|Impact|Mitigation|
+|Risks|Impact|Mitigation|
 |-|-|-|
 |Class imbalance in the ML diagnostics (only 101 of 5,000 customers, 2.0%, reach FINANCIAL DISTRESS)|A diagnostic model can look accurate while missing the minority class|class\_weight="balanced" in both diagnostic models; per-class recall is reported in the confusion-matrix chart, not just overall accuracy.|
 |Feature/label leakage when a model is trained to reproduce the rule engine's own status labels|Inflated, meaningless accuracy (measured: 97.4% accuracy, ROC-AUC 0.998 for Random Forest on "status")|The code prints an explicit leakage note on every relevant chart and treats the result as "how the rules behave", never as a predictive result to act on|
@@ -136,6 +136,23 @@
 
 
 
+
+
+
+**Tools \& Tecniques**
+
+|**Category**|**Tool/Technique**|**Purpose**|
+|-|-|-|
+|Language|Python 3.10+|Core development|
+|Rule engine|Plain Python, pandas|Deterministic, auditable scoring no ML in the decision pathDeterministic, auditable scoring no ML in the decision path|
+|ML library (diagnostics only)|scikit-learn (Random Forest, Logistic Regression)|Explaining/validating the rules on held-out data, never deciding a flag|
+|NLP|scikit-learn CountVectorizer (bag of words)|Top term comparison between flagged and unflagged feedback|
+|Visualisation|Matplotlib|All seven chart types: distributions, fairness, feedback, trends, ROC, importance, confusion matrix|
+|Voice|Browser Web Speech API (sample.html)|Voice to text input only no server side speech library, no speech output|
+|Persistence/audit|SQLite (Python's sqlite3, built in)|Data snapshots, flag reviews/approvals, full query audit log|
+|Web server|Python's http.server (built in)|Serves the browser chat UI no external framework|
+|LLM assist (optional)|Google Gemini API|Rephrases an unrecognised question into a supported one; never sees results or decides flags|
+|Version control|Git, GitHub|Collaborative development and project tracking|
 
 
 
