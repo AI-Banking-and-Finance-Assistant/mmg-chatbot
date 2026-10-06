@@ -156,3 +156,36 @@
 
 
 
+
+
+**Problem Definition** 
+
+
+
+**What exactly is the problem?**
+
+
+
+Banks in developing and underdeveloped regions lose significant revenue because customer financial distress is detected too late. The current process is entirely manual and reactive; a teller or analyst typically notices an issue only after money has already been lost. In MMG's banking dataset, a meaningful share of customers show high credit card utilisation, late payments, declining or overdrawn balances, and heavy loan exposure that manual monitoring misses in real time. The precise problem is the absence of a fast, transparent, automated system that screens every customer's account activity against a consistent set of rules and immediately explains why a customer was flagged.
+
+
+
+**How relevant is it to the theme?**
+
+
+
+This problem sits at the intersection of applied automation and local economic development. Reactive, purely manual review is no longer sufficient to protect modern financial ecosystems. By moving from manual oversight to consistent, always on, explainable rule based screeningbacked by a chat interface, analysts can actually query this problem directly. This problem directly addresses how practical automation can replace outdated manual tracking to solve structural revenue loss and systemic debt, without requiring the bank to trust an opaque model.
+
+
+
+**How beneficial will it be in solving the problem?**
+
+
+
+Solving this problem delivers a dual benefit to both the financial institution and the wider community:
+
+
+
+* **For the Bank**: fewer undetected overdrafts and defaults translate directly into lower financial losses. Because every flag is explainable, staff can act on it immediately and defend the decision, improving operational stability and reducing risk exposure.
+* **For Customers and the Community:** proactive early warnings, together with the chatbot's built in support suggestions per warning sign, allow account managers to step in with restructuring options, tailored payment plans, or financial education support before a household collapses into severe default. Preventing these financial crises improves local financial literacy, protects vulnerable households from predatory debt spirals, and builds trust in the local banking sector.
+
