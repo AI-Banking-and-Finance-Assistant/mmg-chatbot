@@ -17,29 +17,29 @@ system that can detect customers who are already experiencing financial distress
 their accounts. This assists the bankers in intervening early and allows them to help such
 customers. It also gives a justification for each warning raised.
 The goals of The Financial-Distress Early-Warning Assistant are as follows:
-● Develop a reliable algorithm that will mark those customers with money problems,
+- Develop a reliable algorithm that will mark those customers with money problems,
 with each marking justified.
-● Aid the analyst in prioritizing customers with warnings (multiple warnings, high
+- Aid the analyst in prioritizing customers with warnings (multiple warnings, high
 scores).
-● Save on review time and money by analysing all 5,000 customers in milliseconds.
-● Make the information more accessible through a chatbot in the terminal and in the
+- Save on review time and money by analysing all 5,000 customers in milliseconds.
+- Make the information more accessible through a chatbot in the terminal and in the
 browser.
-● Enhance customer wellbeing through the recommendation of appropriate assistance
+- Enhance customer wellbeing through the recommendation of appropriate assistance
 for every warning.
 
 Business success criteria
 
-● Each flag can be explained: the chatbot’s "why" and "rules" responses give the
+- Each flag can be explained: the chatbot’s "why" and "rules" responses give the
 exact criteria used to flag a status.
-● 5,000 customers are loaded and scored within approximately 0.2 seconds (target:
+- 5,000 customers are loaded and scored within approximately 0.2 seconds (target:
 under 60 seconds).
-● Response time for the chat question is approximately 0.01 seconds or faster
+- Response time for the chat question is approximately 0.01 seconds or faster
 (timed).
-● The bank’s anomaly flagger (6.0% of customers) is presented to the user along with
+- The bank’s anomaly flagger (6.0% of customers) is presented to the user along with
 the flags.
-● Bank employees can work with the assistant without any tech skills using
+- Bank employees can work with the assistant without any tech skills using
 recommended questions and natural language.
-● The system accounts for missing or corrupt data in an entire batch.
+- The system accounts for missing or corrupt data in an entire batch.
 
 Business background
 
