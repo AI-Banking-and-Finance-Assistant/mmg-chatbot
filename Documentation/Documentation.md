@@ -22,6 +22,8 @@ The goal of the Financial Distress Early Warning Assistant is to create a rule-b
 system that can detect customers who are already experiencing financial distress through
 their accounts. This assists the bankers in intervening early and allows them to help such
 customers. It also gives a justification for each warning raised.
+
+
 **The goals of The Financial-Distress Early-Warning Assistant are as follows:**
 
 * Develop a reliable algorithm that will mark those customers with money problems,
@@ -121,8 +123,7 @@ clients and providing a way to query the output generated.
 
 **Core Libraries:** 
 
-pandas \& NumPy (Data Handling) 
-
+* pandas \& NumPy (Data Handling) 
 * scikit-learn (diagnostic machine learning and text-term counting) 
 * Matplotlib (Visualization) 
 * SQLite / sqlite3 (audit log, snapshots and flag reviews) and http.server (browser interface), both built in 
@@ -133,5 +134,53 @@ pandas \& NumPy (Data Handling)
 * Algorithm: Weighted rule-based scoring (main); Random Forest and Logistic Regression as diagnostics only 
 * Class balancing: class\_weight="balanced" in diagnostic models 
 * Data preprocessing: StandardScaler in case of Logistic Regression, and the rule engine operates on the original account fields directly. 
-* Performance evaluation: Accuracy, classification report, confusion matrices, ROC, and feature importance. 
+* Performance evaluation: Accuracy, classification report, confusion matrices, ROC, and feature importance.
+
+
+
+### **Problem definition** 
+
+
+
+#### **What is the problem?**
+
+#### &#x20;
+
+One of the significant issues in the field of banking is the delayed identification of a 
+
+customer's financial difficulty. The existence of overdrafts, maxed out credit cards, delays 
+
+in payments, and loan problems comes to attention only when there is a loss of money, 
+
+since nobody reviews all the clients. According to the statistics of the AI, 20.36% of 
+
+customers have enough indications of their problems to attract the attention of specialists, 
+
+but at present, nobody detects them and identifies the reasons. 
+
+The traditional approach to the review of customers relies on the identification of difficulties 
+
+in one account by a bank teller or an analyst, but this process is rather slow, inefficient, and 
+
+hard to detect in busy branches. 
+
+
+
+#### **How relevant is it to the theme, and how beneficial will it be in solving the problem?**
+
+&#x20;
+
+This project is highly relevant to the theme of "AI Solutions for Industries" since it leverages 
+
+intelligent automation on the finance industry which is a very important part of society. It 
+
+transforms the tedious, manual and subjective process into an automated, explainable and 
+
+scalable process, thereby fulfilling the promise of 4IR which seeks to leverage data and 
+
+automation to enhance industry processes. The result is a win-win situation for both the 
+
+bank and the customer, since the former will be saving money and avoiding risks while the 
+
+latter will be assisted before defaulting. 
 
