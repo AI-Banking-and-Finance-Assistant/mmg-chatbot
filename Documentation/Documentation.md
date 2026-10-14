@@ -146,23 +146,7 @@ clients and providing a way to query the output generated.
 
 #### &#x20;
 
-One of the significant issues in the field of banking is the delayed identification of a 
-
-customer's financial difficulty. The existence of overdrafts, maxed out credit cards, delays 
-
-in payments, and loan problems comes to attention only when there is a loss of money, 
-
-since nobody reviews all the clients. According to the statistics of the AI, 20.36% of 
-
-customers have enough indications of their problems to attract the attention of specialists, 
-
-but at present, nobody detects them and identifies the reasons. 
-
-The traditional approach to the review of customers relies on the identification of difficulties 
-
-in one account by a bank teller or an analyst, but this process is rather slow, inefficient, and 
-
-hard to detect in busy branches. 
+One of the significant issues in the field of banking is the delayed identification of a customer's financial difficulty. The existence of overdrafts, maxed out credit cards, delays in payments, and loan problems comes to attention only when there is a loss of money, since nobody reviews all the clients. According to the statistics of the AI, 20.36% of customers have enough indications of their problems to attract the attention of specialists, but at present, nobody detects them and identifies the reasons. The traditional approach to the review of customers relies on the identification of difficulties in one account by a bank teller or an analyst, but this process is rather slow, inefficient, and hard to detect in busy branches. 
 
 
 
@@ -170,17 +154,5 @@ hard to detect in busy branches.
 
 &#x20;
 
-This project is highly relevant to the theme of "AI Solutions for Industries" since it leverages 
-
-intelligent automation on the finance industry which is a very important part of society. It 
-
-transforms the tedious, manual and subjective process into an automated, explainable and 
-
-scalable process, thereby fulfilling the promise of 4IR which seeks to leverage data and 
-
-automation to enhance industry processes. The result is a win-win situation for both the 
-
-bank and the customer, since the former will be saving money and avoiding risks while the 
-
-latter will be assisted before defaulting. 
+This project is highly relevant to the theme of "AI Solutions for Industries" since it leverages intelligent automation on the finance industry which is a very important part of society. It transforms the tedious, manual and subjective process into an automated, explainable and scalable process, thereby fulfilling the promise of 4IR which seeks to leverage data and automation to enhance industry processes. The result is a win-win situation for both the bank and the customer, since the former will be saving money and avoiding risks while the latter will be assisted before defaulting. 
 
