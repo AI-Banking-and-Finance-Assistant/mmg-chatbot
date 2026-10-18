@@ -15,10 +15,6 @@ COLORS = {"EARLY WARNING": "#e69f00", "FINANCIAL DISTRESS": "#c0392b", "NEUTRAL"
 METRICS = ("flagged", "score", "balance", "volume", "history")
 FREQ_NAMES = {"D": "day", "W": "week", "M": "month"}
 
-
-# ----------------------------------------------------------------------------
-# Building the data
-# ----------------------------------------------------------------------------
 def build_frame(assessments: dict) -> pd.DataFrame:
     """One row per customer: status, score and the latest-transaction figures."""
     rows = [dict(status=a["status"], score=a["score"],
@@ -87,10 +83,6 @@ def series_from_snapshots(db_path: Path):
         colors[label] = COLORS[status]
     return out, "Flagged customers per data snapshot", "Customers", colors
 
-
-# ----------------------------------------------------------------------------
-# Drawing
-# ----------------------------------------------------------------------------
 def draw(series: dict, title: str, ylabel: str, colors: dict, subtitle: str) -> plt.Figure:
     fig, ax = plt.subplots(figsize=(11, 5.5))
     for label, s in series.items():
