@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-"""
-ROC-curve chart for the Financial-Distress Early-Warning data
-=============================================================
-
-Run from the folder that contains bank_distress_bot.py, chart_common.py and the banking CSV:
-
-    python roc_curves.py                      # one-vs-rest ROC per status, random forest + logistic regression
-    python roc_curves.py --target anomaly     # how well the raw account figures (and the rule score) find the
                                               # records the bank's anomaly model marked
     python roc_curves.py --seed 7             # different train/test split
     python roc_curves.py --out roc.png        # where to save the image (default: roc_curves.png)
