@@ -1,11 +1,3 @@
-                                              # records the bank's anomaly model marked
-    python roc_curves.py --seed 7             # different train/test split
-    python roc_curves.py --out roc.png        # where to save the image (default: roc_curves.png)
-    python roc_curves.py --no-show            # save the PNG only, don't open a window
-
-Curves are computed on a held-out 25% test set. Inputs are the account figures behind the bot's rules;
-age, gender and location are never used. Read-only: never changes the CSV or the database.
-"""
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
