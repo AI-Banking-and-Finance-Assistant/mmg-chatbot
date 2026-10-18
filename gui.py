@@ -1,6 +1,3 @@
-
-tkinter ships with Python; on Linux: sudo apt install python3-tk
-"""
 import sys
 
 from bank_distress_bot import HELP, load_backend
