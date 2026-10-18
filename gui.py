@@ -1,7 +1,4 @@
-#!/usr/bin/env python3
-"""Desktop window for the Financial-Distress Early-Warning Assistant (tkinter).
 
-    python gui.py                            # open the window
     python gui.py --employee E1234           # set your employee ID
 
 Tabs: "Assistant" (chat, quick questions, customer buttons, Resolve / Approve dialogs) and
