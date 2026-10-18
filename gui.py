@@ -1,8 +1,4 @@
 
-    python gui.py --employee E1234           # set your employee ID
-
-Tabs: "Assistant" (chat, quick questions, customer buttons, Resolve / Approve dialogs) and
-"Flagged customers" (colour-coded sortable table; double-click a row for the full assessment).
 tkinter ships with Python; on Linux: sudo apt install python3-tk
 """
 import sys
