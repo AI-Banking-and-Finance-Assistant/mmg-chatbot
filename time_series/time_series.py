@@ -1,26 +1,3 @@
-#!/usr/bin/env python3
-"""
-Time-series chart for the Financial-Distress Early-Warning data
-================================================================
-
-Run from the folder that contains bank_distress_bot.py and the banking CSV:
-
-    python time_series.py                       # flagged customers per month (default)
-    python time_series.py --metric score        # average risk score over time
-    python time_series.py --metric balance      # average account balance over time
-    python time_series.py --metric volume       # total transaction amount over time
-    python time_series.py --metric history      # flagged customers per data snapshot (needs the bot's .db)
-    python time_series.py --freq W              # weekly instead of monthly (D = daily, W = weekly, M = monthly)
-    python time_series.py --out chart.png       # where to save the image (default: time_series.png)
-    python time_series.py --no-show             # save the PNG only, don't open a window
-
-It reuses the bot's own scoring rules (bank_distress_bot.assess), so the numbers on the chart always
-match what the assistant reports. Like the bot, it never uses age, gender or location. It only reads
-the data; it never changes the CSV or the database.
-
-Note: the first four metrics are grouped by each customer's latest "Transaction Date". The "history"
-metric instead plots the snapshots the bot saves in distress_bot.db each time it sees a new data extract.
-"""
 from __future__ import annotations
 
 import argparse
