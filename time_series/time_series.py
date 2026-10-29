@@ -1,153 +1,249 @@
+"""Time series analysis on the banking data (rubric: Time Series Analysis on Data).
+
+The database holds one 2023 transaction per customer, so the time axis is `Transaction Date`. Each customer is scored by
+the rule engine and the results are aggregated per day / week:
+  1. descriptive series  - customers flagged, flag rate, average risk score, average balance, transaction volume
+  2. decomposition       - trend + weekday seasonality + residual (classical additive method)
+  3. autocorrelation     - is the weekly flag rate predictable from its own past?
+  4. forecasting         - naive / mean / moving-average / Holt linear (+ ARIMA if statsmodels is installed),
+                           compared on a held-out final stretch with MAE, RMSE and MAPE
+  5. snapshots           - if the SQLite store holds two or more data extracts, flags are compared across snapshots
+
+Run:  python time_series.py            (add --holdout 8 --horizon 8 --db distress_bot.db)
+"""
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
-import sys
-from pathlib import Path
 
 import matplotlib
-import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
-import bank_distress_bot as bot
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
-COLORS = {"EARLY WARNING": "#e69f00", "FINANCIAL DISTRESS": "#c0392b", "NEUTRAL": "#2c6fbb"}
-METRICS = ("flagged", "score", "balance", "volume", "history")
-FREQ_NAMES = {"D": "day", "W": "week", "M": "month"}
-
-def build_frame(assessments: dict) -> pd.DataFrame:
-    """One row per customer: status, score and the latest-transaction figures."""
-    rows = [dict(status=a["status"], score=a["score"],
-                 date=pd.to_datetime(a["metrics"]["tx_date"], errors="coerce"),  # tx_date can be None
-                 balance=a["metrics"]["balance"], tx_amount=a["metrics"]["tx_amount"])
-            for a in assessments.values()]
-    df = pd.DataFrame(rows)
-    return df.dropna(subset=["date"])  # customers with no usable transaction date can't be placed on the timeline
+from bank_distress_bot import BASE_DIR, DEFAULT_CSV, POSITIVE_STATUSES, assess_all, read_dataframe, resolve_path
 
 
-def series_from_csv(df: pd.DataFrame, metric: str, freq: str):
-    """Return (dict of label -> Series indexed by timestamp, title, y-axis label, colours)."""
-    period = df["date"].dt.to_period(freq)
-    full = pd.period_range(period.min(), period.max(), freq=freq)
-    unit = FREQ_NAMES[freq]
-
-    def to_ts(s: pd.Series) -> pd.Series:
-        s = s.reindex(full)
-        s.index = s.index.to_timestamp()
-        return s
-
-    if metric == "flagged":
-        counts = df.groupby([period, "status"]).size().unstack(fill_value=0)
-        out, colors = {}, {}
-        for status, label in (("EARLY WARNING", "Early warning"), ("FINANCIAL DISTRESS", "Financial distress")):
-            col = counts[status] if status in counts else pd.Series(0, index=counts.index)
-            out[label] = to_ts(col).fillna(0)
-            colors[label] = COLORS[status]
-        return out, f"Flagged customers per {unit}", "Customers", colors
-    if metric == "score":
-        s = to_ts(df.groupby(period)["score"].mean())
-        return {"Average risk score": s}, f"Average risk score per {unit}", "Score (points)", {}
-    if metric == "balance":
-        s = to_ts(df.groupby(period)["balance"].mean())
-        return ({"Average account balance": s}, f"Average account balance per {unit}",
-                f"Balance ({bot.CONFIG['currency']})", {})
-    if metric == "volume":
-        s = to_ts(df.groupby(period)["tx_amount"].sum()).fillna(0)
-        return ({"Total transaction amount": s}, f"Total transaction amount per {unit}",
-                f"Amount ({bot.CONFIG['currency']})", {})
-    raise ValueError(metric)
+# ---------------------------------------------------------------- series construction
+def customer_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """One row per customer with the rule-engine result attached, indexed by transaction date."""
+    a = assess_all(df)
+    out = pd.DataFrame({"date": df["Transaction Date"].dt.normalize(),
+                        "flagged": [int(a[int(i)]["status"] in POSITIVE_STATUSES) for i in df["Customer ID"]],
+                        "distress": [int(a[int(i)]["status"] == "FINANCIAL DISTRESS") for i in df["Customer ID"]],
+                        "score": [a[int(i)]["score"] for i in df["Customer ID"]],
+                        "balance": df["Account Balance"].to_numpy(),
+                        "volume": df["Transaction Amount"].to_numpy()})
+    return out
 
 
-def series_from_snapshots(db_path: Path):
-    """Flagged customers at each snapshot the bot has saved. None if there is no usable history."""
-    if not db_path.exists():
-        return None
-    con = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)      # read-only: never creates/changes the DB
+def daily_series(cf: pd.DataFrame) -> pd.DataFrame:
+    full = pd.date_range(cf["date"].min(), cf["date"].max(), freq="D")
+    g = cf.groupby("date").agg(customers=("flagged", "size"), flagged=("flagged", "sum"), distress=("distress", "sum"),
+                               avg_score=("score", "mean"), avg_balance=("balance", "mean"),
+                               volume=("volume", "sum")).reindex(full)
+    g[["customers", "flagged", "distress", "volume"]] = g[["customers", "flagged", "distress", "volume"]].fillna(0)
+    g["flag_rate"] = (g["flagged"] / g["customers"].where(g["customers"] > 0)).astype(float)
+    return g
+
+
+def weekly_series(daily: pd.DataFrame) -> pd.DataFrame:
+    """Consecutive 7-day blocks from the first date; an incomplete last block is dropped."""
+    block = (np.arange(len(daily)) // 7)
+    g = daily.assign(block=block).groupby("block")
+    w = pd.DataFrame({"start": g.apply(lambda x: x.index[0], include_groups=False), "days": g.size(),
+                      "customers": g["customers"].sum(), "flagged": g["flagged"].sum(), "distress": g["distress"].sum(),
+                      "volume": g["volume"].sum()})
+    w["flag_rate"] = w["flagged"] / w["customers"]
+    avg = daily.assign(block=block, ws=daily["avg_score"] * daily["customers"], wb=daily["avg_balance"] * daily["customers"])
+    a = avg.groupby("block")[["ws", "wb"]].sum()
+    w["avg_score"], w["avg_balance"] = a["ws"] / w["customers"], a["wb"] / w["customers"]
+    return w[w["days"] == 7].set_index("start")
+
+
+# ---------------------------------------------------------------- decomposition and autocorrelation
+def decompose(y: pd.Series, period: int = 7) -> pd.DataFrame:
+    """Classical additive decomposition: centred moving-average trend, mean seasonal profile, residual."""
+    trend = y.rolling(period, center=True, min_periods=period).mean()
+    detr = y - trend
+    prof = detr.groupby(np.arange(len(y)) % period).mean()
+    seasonal = pd.Series(prof.reindex(np.arange(len(y)) % period).to_numpy() - prof.mean(), index=y.index)
+    return pd.DataFrame({"observed": y, "trend": trend, "seasonal": seasonal, "residual": y - trend - seasonal})
+
+
+def acf(y: np.ndarray, nlags: int = 12) -> np.ndarray:
+    y = np.asarray(y, float) - np.mean(y)
+    d = float(np.dot(y, y)) or 1.0
+    return np.array([np.dot(y[:len(y) - k], y[k:]) / d for k in range(nlags + 1)])
+
+
+# ---------------------------------------------------------------- forecasting models (numpy only)
+def f_naive(train: np.ndarray, h: int) -> np.ndarray:
+    return np.repeat(train[-1], h)
+
+
+def f_mean(train: np.ndarray, h: int) -> np.ndarray:
+    return np.repeat(train.mean(), h)
+
+
+def f_moving_average(train: np.ndarray, h: int, window: int = 4) -> np.ndarray:
+    return np.repeat(train[-window:].mean(), h)
+
+
+def holt_fit(train: np.ndarray) -> tuple[float, float, float, float]:
+    """Grid-search Holt's linear method on one-step-ahead squared error. Returns (alpha, beta, level, trend)."""
+    best = (np.inf, 0.5, 0.1, train[0], 0.0)
+    for al in np.linspace(0.05, 0.95, 19):
+        for be in np.linspace(0.01, 0.5, 10):
+            lvl, tr, sse = train[0], train[1] - train[0], 0.0
+            for v in train[1:]:
+                sse += (v - (lvl + tr)) ** 2
+                new = al * v + (1 - al) * (lvl + tr)
+                tr = be * (new - lvl) + (1 - be) * tr
+                lvl = new
+            if sse < best[0]:
+                best = (sse, al, be, lvl, tr)
+    return best[1:]
+
+
+def f_holt(train: np.ndarray, h: int) -> np.ndarray:
+    _, _, lvl, tr = holt_fit(train)
+    return lvl + tr * np.arange(1, h + 1)
+
+
+def f_arima(train: np.ndarray, h: int) -> np.ndarray | None:
     try:
-        rows = con.execute(
-            "SELECT s.snapshot_id, s.taken_at, c.status, COUNT(*) FROM snapshot_customers c "
-            "JOIN snapshots s USING(snapshot_id) GROUP BY s.snapshot_id, c.status ORDER BY s.snapshot_id").fetchall()
-    except sqlite3.Error:
+        from statsmodels.tsa.arima.model import ARIMA
+    except ImportError:
         return None
+    try:
+        return np.asarray(ARIMA(train, order=(1, 0, 1)).fit().forecast(h))
+    except Exception:
+        return None
+
+
+MODELS = {"naive (last value)": f_naive, "mean of training weeks": f_mean, "moving average (4 wks)": f_moving_average,
+          "Holt linear trend": f_holt, "ARIMA(1,0,1)": f_arima}
+
+
+def metrics(actual: np.ndarray, pred: np.ndarray) -> dict:
+    err = actual - pred
+    return dict(MAE=float(np.mean(np.abs(err))), RMSE=float(np.sqrt(np.mean(err ** 2))),
+                MAPE=float(np.mean(np.abs(err) / np.where(actual == 0, np.nan, np.abs(actual))) * 100))
+
+
+def compare_models(y: np.ndarray, holdout: int) -> pd.DataFrame:
+    train, test = y[:-holdout], y[-holdout:]
+    rows = []
+    for name, fn in MODELS.items():
+        pred = fn(train, holdout)
+        if pred is not None:
+            rows.append(dict(model=name, **metrics(test, pred)))
+    return pd.DataFrame(rows).sort_values("RMSE").reset_index(drop=True)
+
+
+# ---------------------------------------------------------------- snapshots (optional)
+def snapshot_history(db_path: str) -> pd.DataFrame:
+    path = resolve_path(db_path)
+    if not path.exists():
+        return pd.DataFrame()
+    con = sqlite3.connect(path)
+    try:
+        return pd.read_sql_query(
+            "SELECT s.snapshot_id, s.taken_at, COUNT(*) AS customers, "
+            "SUM(c.status IN ('EARLY WARNING','FINANCIAL DISTRESS')) AS flagged, "
+            "SUM(c.status = 'FINANCIAL DISTRESS') AS distress, AVG(c.score) AS avg_score "
+            "FROM snapshots s JOIN snapshot_customers c USING(snapshot_id) GROUP BY s.snapshot_id ORDER BY s.snapshot_id", con)
+    except Exception:
+        return pd.DataFrame()
     finally:
         con.close()
-    if not rows:
-        return None
-    df = pd.DataFrame(rows, columns=["sid", "taken_at", "status", "n"])
-    df["taken_at"] = pd.to_datetime(df["taken_at"])
-    wide = df.pivot_table(index=["sid", "taken_at"], columns="status", values="n", fill_value=0).reset_index()
-    out, colors = {}, {}
-    for status, label in (("EARLY WARNING", "Early warning"), ("FINANCIAL DISTRESS", "Financial distress")):
-        vals = wide[status] if status in wide else pd.Series(0, index=wide.index)
-        out[label] = pd.Series(vals.values, index=wide["taken_at"])
-        colors[label] = COLORS[status]
-    return out, "Flagged customers per data snapshot", "Customers", colors
-
-def draw(series: dict, title: str, ylabel: str, colors: dict, subtitle: str) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=(11, 5.5))
-    for label, s in series.items():
-        ax.plot(s.index, s.values, label=label, color=colors.get(label, COLORS["NEUTRAL"]), linewidth=2,
-                marker="o" if len(s) <= 60 else None, markersize=4)
-    ax.set_title(title, fontsize=14, fontweight="bold", loc="left", pad=24)
-    ax.text(0, 1.01, subtitle, transform=ax.transAxes, fontsize=9, color="#666666", va="bottom")
-    ax.set_xlabel("Date")
-    ax.set_ylabel(ylabel)
-    ax.grid(alpha=0.3)
-    ax.spines[["top", "right"]].set_visible(False)
-    if len(series) > 1:
-        ax.legend(frameon=False)
-    fig.autofmt_xdate()
-    fig.tight_layout()
-    return fig
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Draw a time-series chart from the banking data.")
-    ap.add_argument("csv", nargs="?", default=bot.os.getenv("DATA_FILE", bot.DEFAULT_CSV),
-                    help="bank database CSV (default: same file the assistant uses)")
-    ap.add_argument("--metric", choices=METRICS, default="flagged", help="what to plot (default: flagged)")
-    ap.add_argument("--freq", choices=list(FREQ_NAMES), default="M",
-                    help="grouping period: D=day, W=week, M=month (default: M)")
-    ap.add_argument("--db", default=bot.os.getenv("DB_PATH", "distress_bot.db"),
-                    help="the assistant's SQLite file (only used for --metric history)")
-    ap.add_argument("--out", default="time_series.png", help="image file to save (default: time_series.png)")
-    ap.add_argument("--no-show", action="store_true", help="save the image without opening a window")
-    args = ap.parse_args()
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Time series analysis of flagged customers")
+    ap.add_argument("--data", default=DEFAULT_CSV)
+    ap.add_argument("--db", default="distress_bot.db")
+    ap.add_argument("--reports", default="reports")
+    ap.add_argument("--holdout", type=int, default=8, help="final weeks kept back to test the forecasts")
+    ap.add_argument("--horizon", type=int, default=8, help="weeks to forecast beyond the data")
+    a = ap.parse_args()
 
-    if args.metric == "history":
-        db_path = bot.resolve_path(args.db)
-        result = series_from_snapshots(db_path)
-        if result is None or len(next(iter(result[0].values()))) < 2:
-            sys.exit(f"Not enough snapshot history in {db_path} yet. The assistant saves one snapshot each time "
-                     f"it loads a changed data file, so you need at least two. Try another --metric for now.")
-        series, title, ylabel, colors = result
-        subtitle = f"Source: {db_path.name}"
+    data = resolve_path(a.data)
+    if not data.exists():
+        raise SystemExit(f"Data file not found: {data}")
+    out_dir = BASE_DIR / a.reports
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    cf = customer_frame(read_dataframe(str(data)))
+    daily, weekly = daily_series(cf), None
+    weekly = weekly_series(daily)
+    y = weekly["flag_rate"].to_numpy()
+    print(f"Daily points: {len(daily)} | complete weeks: {len(weekly)} | mean weekly flag rate {y.mean():.1%} "
+          f"(sd {y.std(ddof=1):.1%})")
+
+    # 1. descriptive plots
+    fig, ax = plt.subplots(2, 2, figsize=(14, 8))
+    weekly["flagged"].plot(ax=ax[0, 0], marker="o", color="#d62728", label="flagged"); weekly["distress"].plot(
+        ax=ax[0, 0], marker="s", color="#7f0000", label="distress"); ax[0, 0].set_title("Customers flagged per week"); ax[0, 0].legend()
+    weekly["avg_score"].plot(ax=ax[0, 1], color="#ff7f0e"); ax[0, 1].set_title("Average risk score per week")
+    weekly["avg_balance"].plot(ax=ax[1, 0], color="#1f77b4"); ax[1, 0].set_title("Average account balance per week")
+    weekly["volume"].plot(ax=ax[1, 1], color="#2ca02c"); ax[1, 1].set_title("Total transaction volume per week")
+    fig.tight_layout(); fig.savefig(out_dir / "ts_overview.png", dpi=130); plt.close(fig)
+
+    # 2. decomposition of the daily number of flagged customers (weekday seasonality)
+    dec = decompose(daily["flagged"].astype(float), 7)
+    fig, ax = plt.subplots(4, 1, figsize=(12, 9), sharex=True)
+    for x, c in zip(ax, dec.columns):
+        dec[c].plot(ax=x); x.set_ylabel(c)
+    ax[0].set_title("Decomposition of daily flagged customers (period = 7 days)")
+    fig.tight_layout(); fig.savefig(out_dir / "ts_decomposition.png", dpi=130); plt.close(fig)
+    seasonal_share = float(dec["seasonal"].var() / dec["observed"].var())
+
+    # 3. autocorrelation of the weekly flag rate
+    ac, band = acf(y, 12), 1.96 / np.sqrt(len(y))
+    fig, x = plt.subplots(figsize=(8, 4))
+    x.bar(range(len(ac)), ac); x.axhline(band, ls="--", c="grey"); x.axhline(-band, ls="--", c="grey")
+    x.set_title("Autocorrelation of weekly flag rate (dashed = 95% noise band)"); x.set_xlabel("lag (weeks)")
+    fig.tight_layout(); fig.savefig(out_dir / "ts_acf.png", dpi=130); plt.close(fig)
+    significant = [int(k) for k in range(1, len(ac)) if abs(ac[k]) > band]
+
+    # 4. forecasting comparison on the held-out weeks
+    table = compare_models(y, a.holdout)
+    print("\nForecast comparison on the last", a.holdout, "weeks (weekly flag rate):")
+    print(table.assign(MAE=lambda d: d.MAE * 100, RMSE=lambda d: d.RMSE * 100).round(2).to_string(index=False))
+    print("(MAE/RMSE in percentage points, MAPE in %)")
+    best = table.iloc[0]["model"]
+    fc = MODELS[best](y, a.horizon)
+    resid_sd = float(np.std(y[-a.holdout:] - MODELS[best](y[:-a.holdout], a.holdout), ddof=1))
+    idx = pd.date_range(weekly.index[-1] + pd.Timedelta(days=7), periods=a.horizon, freq="7D")
+    fig, x = plt.subplots(figsize=(12, 4.5))
+    weekly["flag_rate"].plot(ax=x, marker="o", label="actual weekly flag rate")
+    pd.Series(fc, index=idx).plot(ax=x, marker="s", color="#d62728", label=f"forecast ({best})")
+    x.fill_between(idx, fc - 1.96 * resid_sd, fc + 1.96 * resid_sd, color="#d62728", alpha=0.15, label="approx. 95% range")
+    x.axvline(weekly.index[-a.holdout], ls=":", c="grey"); x.set_title("Weekly flag rate with forecast"); x.legend()
+    fig.tight_layout(); fig.savefig(out_dir / "ts_forecast.png", dpi=130); plt.close(fig)
+
+    # 5. snapshots
+    snaps = snapshot_history(a.db)
+    if len(snaps) >= 2:
+        print("\nSnapshots in the audit database:\n" + snaps.to_string(index=False))
     else:
-        csv_path = bot.resolve_path(args.csv)
-        if not csv_path.exists():
-            sys.exit(f"Data file not found: {csv_path}\nPlace {bot.DEFAULT_CSV} next to this script "
-                     f"or pass its path: python time_series.py path/to/file.csv")
-        assessments, _ = bot.load_assessments(str(csv_path))
-        df = build_frame(assessments)
-        if df.empty:
-            sys.exit("The data file has no customers to plot.")
-        series, title, ylabel, colors = series_from_csv(df, args.metric, args.freq)
-        subtitle = (f"{len(df):,} customers from {csv_path.name}, grouped by latest transaction date "
-                    f"({df['date'].min():%d %b %Y} to {df['date'].max():%d %b %Y})")
+        print("\nSnapshots: fewer than 2 stored - load a new data extract in the bot to start trend tracking.")
 
-    show = not args.no_show
-    if not show:
-        matplotlib.use("Agg")
-    fig = draw(series, title, ylabel, colors, subtitle)
-    out = Path(args.out).expanduser()
-    fig.savefig(out, dpi=150)
-    print(f"Chart saved to {out.resolve()}")
-    if show:
-        try:
-            plt.show()
-        except Exception as e:                      # e.g. no display available
-            print(f"(Could not open a window: {type(e).__name__}. The image was still saved.)", file=sys.stderr)
+    report = dict(weeks=int(len(weekly)), mean_flag_rate=float(y.mean()), sd_flag_rate=float(y.std(ddof=1)),
+                  weekday_seasonality_share_of_variance=seasonal_share, significant_acf_lags=significant,
+                  best_forecast_model=str(best), forecast_comparison=table.to_dict("records"),
+                  forecast=[round(float(v), 4) for v in fc], snapshots=len(snaps))
+    (out_dir / "time_series_report.json").write_text(json.dumps(report, indent=2))
+    print(f"\nWeekday seasonality explains {seasonal_share:.1%} of daily variance; significant ACF lags: {significant or 'none'}")
+    print(f"Saved charts and time_series_report.json to {out_dir}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
+
